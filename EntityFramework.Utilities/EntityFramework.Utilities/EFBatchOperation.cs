@@ -20,8 +20,9 @@ namespace EntityFramework.Utilities
         /// </summary>
         /// <param name="items">The items to insert</param>
         /// <param name="connection">The DbConnection to use for the insert. Only needed when for example a profiler wraps the connection. Then you need to provide a connection of the type the provider use.</param>
-        /// <param name="batchSize">The size of each batch. Default depends on the provider. SqlProvider uses 15000 as default</param>        
-        void InsertAll<TEntity>(IEnumerable<TEntity> items, DbConnection connection = null, int? batchSize = null) where TEntity : class, T; 
+        /// <param name="batchSize">The size of each batch. Default depends on the provider. SqlProvider uses 15000 as default</param>
+        /// <param name="transaction">The DbTransaction to use for the insert</param>
+        void InsertAll<TEntity>(IEnumerable<TEntity> items, DbConnection connection = null, int? batchSize = null, DbTransaction transaction = null) where TEntity : class, T; 
         IEFBatchOperationFiltered<TContext, T> Where(Expression<Func<T, bool>> predicate);
 
 
@@ -33,7 +34,8 @@ namespace EntityFramework.Utilities
         /// <param name="updateSpecification">Define which columns to update</param>
         /// <param name="connection">The DbConnection to use for the insert. Only needed when for example a profiler wraps the connection. Then you need to provide a connection of the type the provider use.</param>
         /// <param name="batchSize">The size of each batch. Default depends on the provider. SqlProvider uses 15000 as default</param>
-        void UpdateAll<TEntity>(IEnumerable<TEntity> items, Action<UpdateSpecification<TEntity>> updateSpecification, DbConnection connection = null, int? batchSize = null) where TEntity : class, T;
+        /// <param name="transaction">The DbTransaction to use for the insert</param>
+        void UpdateAll<TEntity>(IEnumerable<TEntity> items, Action<UpdateSpecification<TEntity>> updateSpecification, DbConnection connection = null, int? batchSize = null, DbTransaction transaction = null) where TEntity : class, T;
     }
 
     public class UpdateSpecification<T>
@@ -95,7 +97,7 @@ namespace EntityFramework.Utilities
         /// <param name="items">The items to insert</param>
         /// <param name="connection">The DbConnection to use for the insert. Only needed when for example a profiler wraps the connection. Then you need to provide a connection of the type the provider use.</param>
         /// <param name="batchSize">The size of each batch. Default depends on the provider. SqlProvider uses 15000 as default</param>
-        public void InsertAll<TEntity>(IEnumerable<TEntity> items, DbConnection connection = null, int? batchSize = null) where TEntity : class, T
+        public void InsertAll<TEntity>(IEnumerable<TEntity> items, DbConnection connection = null, int? batchSize = null, DbTransaction transaction = null) where TEntity : class, T
         {
             var con = context.Connection as EntityConnection;
             if (con == null && connection == null)
@@ -126,7 +128,7 @@ namespace EntityFramework.Utilities
                     });
                 }
 
-                provider.InsertItems(items, tableMapping.Schema, tableMapping.TableName, properties, connectionToUse, batchSize);
+                provider.InsertItems(items, tableMapping.Schema, tableMapping.TableName, properties, connectionToUse, batchSize, transaction);
             }
             else
             {
@@ -136,7 +138,7 @@ namespace EntityFramework.Utilities
         }
 
 
-        public void UpdateAll<TEntity>(IEnumerable<TEntity> items, Action<UpdateSpecification<TEntity>> updateSpecification, DbConnection connection = null, int? batchSize = null) where TEntity : class, T
+        public void UpdateAll<TEntity>(IEnumerable<TEntity> items, Action<UpdateSpecification<TEntity>> updateSpecification, DbConnection connection = null, int? batchSize = null, DbTransaction transaction = null) where TEntity : class, T
         {
             var con = context.Connection as EntityConnection;
             if (con == null && connection == null)
@@ -166,7 +168,7 @@ namespace EntityFramework.Utilities
 
                 var spec = new UpdateSpecification<TEntity>();
                 updateSpecification(spec);
-                provider.UpdateItems(items, tableMapping.Schema, tableMapping.TableName, properties, connectionToUse, batchSize, spec);
+                provider.UpdateItems(items, tableMapping.Schema, tableMapping.TableName, properties, connectionToUse, batchSize, spec, transaction);
             }
             else
             {
@@ -199,7 +201,7 @@ namespace EntityFramework.Utilities
 
                 var delete = provider.GetDeleteQuery(queryInformation);
                 var parameters = query.Parameters.Select(p => new SqlParameter { Value = p.Value, ParameterName = p.Name }).ToArray<object>();
-                return context.ExecuteStoreCommand(delete, parameters);
+                return context.ExecuteStoreCommand(TransactionalBehavior.EnsureTransaction, delete, parameters);
             }
             else
             {
